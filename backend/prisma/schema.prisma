@@ -1,0 +1,179 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// define your models
+
+enum Status {
+  ONLINE
+  OFFLINE
+  IN_GAME
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+}
+
+model User {
+  id                 String          @id @default(cuid())
+  email              String?         @unique
+  password           String?
+  name               String
+  pseudo             String          @unique @default("Pseudo")
+  avatar             String          @default("https://i0.wp.com/sbcf.fr/wp-content/uploads/2018/03/sbcf-default-avatar.png?ssl=1")
+  oauth              OAuth?
+  twoFactorSecret    String?
+  isTwoFactorEnabled Boolean         @default(false)
+  sentRequests       Friendship[]    @relation("FriendshipSenders")
+  receivedRequests   Friendship[]    @relation("FriendshipReceivers")
+  status             Status          @default(OFFLINE)
+  channels           Channel[]       @relation("ChannelMembers")
+  messages           Message[]
+  ownedChannels      Channel[]       @relation("ChannelOwner")
+  blockedUsers       BlockedUser[]   @relation("BlockedByRelation")
+  blockedBy          BlockedUser[]   @relation("BlockedUserRelation")
+  adminInChannels    ChannelAdmin[]
+  ChannelMember      ChannelMember[]
+  ChannelBan         ChannelBan[]
+  ChannelMute        ChannelMute[]
+  eloScore           Int             @default(500)
+  player1Matches     Match[]         @relation("Player1Matches")
+  player2Matches     Match[]         @relation("Player2Matches")
+  wonMatches         Match[]         @relation("MatchWinner")
+}
+
+model Match {
+  id        String   @id @default(cuid())
+  player1Id String
+  player2Id String
+  winnerId  String?
+  date      DateTime @default(now())
+
+  player1 User  @relation("Player1Matches", fields: [player1Id], references: [id])
+  player2 User  @relation("Player2Matches", fields: [player2Id], references: [id])
+  winner  User? @relation("MatchWinner", fields: [winnerId], references: [id])
+
+  playedAt DateTime @default(now())
+  @@unique([player1Id, player2Id, date])
+}
+
+model BlockedUser {
+  blockerId String
+  blockedId String
+  blocked   User   @relation("BlockedUserRelation", fields: [blockedId], references: [id])
+  blocker   User   @relation("BlockedByRelation", fields: [blockerId], references: [id])
+
+  @@id([blockerId, blockedId])
+}
+
+// delete the members
+model Channel {
+  id              String          @id @default(cuid())
+  name            String
+  isPrivate       Boolean         @default(false)
+  isDirectMessage Boolean         @default(false)
+  password        String?
+  ownerId         String?
+  owner           User?           @relation("ChannelOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  messages        Message[]
+  members         User[]          @relation("ChannelMembers")
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  admins          ChannelAdmin[]
+  ChannelMember   ChannelMember[]
+  bans            ChannelBan[]
+  mutes           ChannelMute[]
+}
+
+model ChannelBan {
+  userId    String
+  channelId String
+  bannedId  DateTime  @default(now())
+  expiresAt DateTime?
+  reason    String?
+  bannedBy  String
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId])
+}
+
+model ChannelMute {
+  userId    String
+  channelId String
+  mutedId   DateTime  @default(now())
+  reason    String?
+  expireAt  DateTime?
+  mutedBy   String
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId])
+}
+
+model ChannelMember {
+  userId    String
+  channelId String
+  joinedAt  DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel   Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId])
+}
+
+model ChannelAdmin {
+  userId     String
+  channelId  String
+  assignedAt DateTime @default(now())
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channel    Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([userId, channelId])
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  content   String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  channelId String
+  channel   Channel  @relation(fields: [channelId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Friendship {
+  id         String           @id @default(cuid())
+  senderId   String
+  receiverId String
+  status     FriendshipStatus @default(PENDING)
+  createdAt  DateTime         @default(now())
+
+  sender   User @relation("FriendshipSenders", fields: [senderId], references: [id])
+  receiver User @relation("FriendshipReceivers", fields: [receiverId], references: [id])
+}
+
+model Token {
+  id    String @id @default(cuid())
+  value String @unique
+}
+
+model OAuth {
+  id          String @id @default(cuid())
+  accessToken String
+  tokenType   String
+  createdAt   Int
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String @unique
+}
